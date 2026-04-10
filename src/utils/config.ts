@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync, renameSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, renameSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import si from 'systeminformation';
 
@@ -14,10 +14,22 @@ export const BenchmarkEntrySchema = z.object({
   tps: z.number(),
 });
 
+export const ContextProbeSchema = z.object({
+  contextSize: z.number(),
+  tps: z.number().nullable(),
+  passed: z.boolean(),
+});
+
 export const ModelSettingsSchema = z.object({
   modelId: z.string(),
   hardwareFingerprint: z.string(),
+  hardwareInfo: z.object({
+    cpu: z.string(),
+    gpu: z.string(),
+    ramGb: z.number(),
+  }).optional(),
   maxContext: z.number(),
+  contextProbes: z.array(ContextProbeSchema).optional(),
   benchmarks: z.array(BenchmarkEntrySchema),
 });
 
@@ -66,10 +78,12 @@ export async function getHardwareInfo(): Promise<HardwareInfo> {
 // File I/O
 // ---------------------------------------------------------------------------
 
-const SETTINGS_FILE = 'benchmark-settings.json';
-const SETTINGS_TMP = 'benchmark-settings.json.tmp';
+const SETTINGS_FILE = 'results/benchmarks.json';
+const SETTINGS_TMP = 'results/benchmarks.json.tmp';
 
 function resolveSettingsPath(): string {
+  const dir = join(process.cwd(), 'results');
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   return join(process.cwd(), SETTINGS_FILE);
 }
 

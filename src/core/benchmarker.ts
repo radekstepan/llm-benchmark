@@ -168,7 +168,8 @@ export async function runSingleTest(
       code === 'econnreset' ||
       msg.includes('socket hang up') ||
       msg.includes('oom') ||
-      msg.includes('out of memory')
+      msg.includes('out of memory') ||
+      msg.includes('tokens to keep from the initial prompt')
     ) {
       throw new InferenceOOMError();
     }
@@ -188,6 +189,17 @@ export async function runSingleTest(
 // Progress callback types
 // ---------------------------------------------------------------------------
 
+export interface ContextProbe {
+  contextSize: number;
+  tps: number | null;
+  passed: boolean;
+}
+
+export interface ContextSearchResult {
+  maxContext: number;
+  probes: ContextProbe[];
+}
+
 export interface BenchmarkProgressCallback {
   onContextProbe?: (context: number, status: 'load' | 'test' | 'oom' | 'ok') => void;
   onSpeedTest?: (fraction: number, result: TestResult | null) => void;
@@ -200,15 +212,16 @@ export interface BenchmarkProgressCallback {
 
 /**
  * Determine the maximum usable context size for a model using binary search.
- * Returns the discovered max context, or MIN_CONTEXT on failure.
+ * Returns the discovered max context and all probe results.
  */
 export async function findMaxContext(
   modelId: string,
   callbacks: BenchmarkProgressCallback = {},
-): Promise<number> {
+): Promise<ContextSearchResult> {
   let lo = MIN_CONTEXT;
   let hi = MAX_CONTEXT_GUESS;
   let bestOk = MIN_CONTEXT;
+  const probes: ContextProbe[] = [];
 
   while (lo <= hi) {
     const mid = Math.floor((lo + hi) / 2);
@@ -232,6 +245,7 @@ export async function findMaxContext(
     if (loadOOM) {
       callbacks.onLog?.(`[Context Search] OOM on load at ${mid}, reducing...`);
       callbacks.onContextProbe?.(mid, 'oom');
+      probes.push({ contextSize: mid, tps: null, passed: false });
       hi = mid - 1;
       continue;
     }
@@ -256,16 +270,18 @@ export async function findMaxContext(
       const reason = inferenceOOM ? 'OOM during inference' : `TPS too low (${result!.tps.toFixed(1)})`;
       callbacks.onLog?.(`[Context Search] Failed at ${mid}: ${reason}, reducing...`);
       callbacks.onContextProbe?.(mid, 'oom');
+      probes.push({ contextSize: mid, tps: inferenceOOM ? null : result!.tps, passed: false });
       hi = mid - 1;
     } else {
       callbacks.onLog?.(`[Context Search] Success at ${mid} (TPS: ${result!.tps.toFixed(1)})`);
       callbacks.onContextProbe?.(mid, 'ok');
+      probes.push({ contextSize: mid, tps: result!.tps, passed: true });
       bestOk = mid;
       lo = mid + 1;
     }
   }
 
-  return bestOk;
+  return { maxContext: bestOk, probes };
 }
 
 // ---------------------------------------------------------------------------
@@ -290,7 +306,18 @@ export async function benchmarkSpeeds(
     callbacks.onLog?.(`[Speed Test] Testing at ${Math.round(fraction * 100)}% context (${contextUsed} tokens)...`);
     callbacks.onSpeedTest?.(fraction, null);
 
-    const prompt = generateDummyPrompt(contextUsed);
+    // Reload the model at the correct context size for this test fraction.
+    // This also allows the server to recover from any prior OOM state.
+    await unloadAll();
+    try {
+      await loadModel(modelId, contextUsed);
+    } catch (err) {
+      callbacks.onLog?.(`[Speed Test] Load failed at ${contextUsed} tokens: ${String(err)}`);
+      continue;
+    }
+
+    const targetTokens = Math.floor(contextUsed * CONTEXT_FILL_RATIO);
+    const prompt = generateDummyPrompt(targetTokens);
 
     let testResult: TestResult | null = null;
     try {

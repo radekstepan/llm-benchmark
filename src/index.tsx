@@ -69,7 +69,7 @@ async function processQueue(selectedIds: string[]): Promise<void> {
 
     // ----- Binary search for max context -----
     try {
-      maxContext = await findMaxContext(modelId, {
+      const contextResult = await findMaxContext(modelId, {
         onContextProbe: (context, status) => {
           if (isShuttingDown) return;
           const progressMap = { load: 10, test: 30, oom: 5, ok: 50 };
@@ -83,6 +83,7 @@ async function processQueue(selectedIds: string[]): Promise<void> {
           useAppStore.getState().appendLog(msg);
         },
       });
+      maxContext = contextResult.maxContext;
 
       useAppStore.getState().appendLog(`Max context found: ${maxContext} tokens`);
     } catch (err) {
