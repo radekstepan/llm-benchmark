@@ -5,3 +5,4 @@ dist/
 benchmark-settings.json.tmp
 # The local benchmark results file should probably be ignored if you want to keep measurements local
 benchmark-settings.json
+.claude/
