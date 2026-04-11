@@ -3,6 +3,11 @@
     {
       "modelId": "google/gemma-3-4b",
       "hardwareFingerprint": "03f91fe0b9916b0d",
+      "hardwareInfo": {
+        "cpu": "Apple M1 Max",
+        "gpu": "Apple M1 Max",
+        "ramGb": 64
+      },
       "maxContext": 13567,
       "benchmarks": [
         {
@@ -30,6 +35,11 @@
     {
       "modelId": "qwen/qwen3.5-9b",
       "hardwareFingerprint": "03f91fe0b9916b0d",
+      "hardwareInfo": {
+        "cpu": "Apple M1 Max",
+        "gpu": "Apple M1 Max",
+        "ramGb": 64
+      },
       "maxContext": 25088,
       "benchmarks": [
         {
