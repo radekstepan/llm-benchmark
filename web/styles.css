@@ -45,11 +45,12 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   cursor:pointer;
 }
 .select-trigger:hover{border-color:#d6d3d1}
+.select-trigger.open{border-radius:10px 10px 0 0;border-bottom-color:transparent}
 .select-value{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .select-arrow{color:var(--muted);font-size:11px}
 .select-menu{
-  position:absolute;top:38px;left:0;z-index:40;width:100%;
-  border:1px solid var(--border);border-radius:12px;background:#fff;
+  position:absolute;top:33px;left:0;z-index:40;width:100%;
+  border:1px solid var(--border);border-radius:0 0 12px 12px;background:#fff;
   box-shadow:0 10px 24px rgba(0,0,0,.08);
   padding:8px;
 }

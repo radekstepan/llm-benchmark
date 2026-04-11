@@ -129,6 +129,7 @@ function buildToolbar() {
   if (!ds) return;
   ds.innerHTML = '';
   const dTrigger = de('button', 'select-trigger');
+  if (openMenu === 'device') dTrigger.classList.add('open');
   const selDeviceLabel = devices.get(selDevice!) || 'Select device';
   dTrigger.innerHTML = '<span class="select-value">' + selDeviceLabel + '</span><span class="select-arrow">▾</span>';
   dTrigger.onclick = (e) => {
@@ -185,6 +186,7 @@ function buildToolbar() {
   if (!ms) return;
   ms.innerHTML = '';
   const mTrigger = de('button', 'select-trigger');
+  if (openMenu === 'model') mTrigger.classList.add('open');
   const selectedModels = [...selModels].map(shortModel);
   const modelLabel = selectedModels.length === models.length
     ? 'All models (' + models.length + ')'
