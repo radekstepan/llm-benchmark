@@ -26,6 +26,33 @@
           "tps": 45.3
         }
       ]
+    },
+    {
+      "modelId": "qwen/qwen3.5-9b",
+      "hardwareFingerprint": "03f91fe0b9916b0d",
+      "maxContext": 25088,
+      "benchmarks": [
+        {
+          "contextUsed": 6272,
+          "ttftMs": 7331,
+          "tps": 30
+        },
+        {
+          "contextUsed": 12544,
+          "ttftMs": 21568,
+          "tps": 20.8
+        },
+        {
+          "contextUsed": 18816,
+          "ttftMs": 37645,
+          "tps": 12
+        },
+        {
+          "contextUsed": 25088,
+          "ttftMs": 56785,
+          "tps": 1.5
+        }
+      ]
     }
   ]
 }

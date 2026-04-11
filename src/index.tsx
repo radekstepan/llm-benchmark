@@ -48,7 +48,7 @@ process.on('uncaughtException', (err) => {
 
 async function processQueue(selectedIds: string[]): Promise<void> {
   const store = useAppStore.getState();
-  const { hardwareFingerprint, cpuModel, gpuModel, gpuVram } = store;
+  const { hardwareFingerprint, cpuModel, gpuModel, ramGb } = store;
 
   for (const modelId of selectedIds) {
     if (isShuttingDown) break;
@@ -128,6 +128,11 @@ async function processQueue(selectedIds: string[]): Promise<void> {
     const modelSettings = {
       modelId,
       hardwareFingerprint,
+      hardwareInfo: {
+        cpu: cpuModel,
+        gpu: gpuModel,
+        ramGb,
+      },
       maxContext,
       benchmarks,
     };
@@ -169,11 +174,13 @@ async function main(): Promise<void> {
         resolveModelSelection(ids);
       },
     }),
-    { exitOnCtrlC: false },
+    { exitOnCtrlC: true },
   );
 
   // Wire Ctrl+C to graceful shutdown while Ink is running
-  process.on('SIGINT', handleExit);
+  process.on('SIGINT', () => {
+    handleExit();
+  });
 
   try {
     // ----- Phase: init — detect hardware and start server -----
