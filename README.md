@@ -1,5 +1,7 @@
 # llm-benchmark
 
+![llm-benchmark screenshot](screenshot.png)
+
 A CLI tool that benchmarks local LLMs running via [LM Studio](https://lmstudio.ai). It discovers available models, lets you choose which to test, then automatically finds each model's maximum usable context window and measures inference speed at multiple context fill levels. Results are persisted and keyed by model + hardware fingerprint so re-runs on different hardware produce separate entries.
 
 ## Features
