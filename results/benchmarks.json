@@ -1,0 +1,31 @@
+{
+  "models": [
+    {
+      "modelId": "google/gemma-3-4b",
+      "hardwareFingerprint": "03f91fe0b9916b0d",
+      "maxContext": 13567,
+      "benchmarks": [
+        {
+          "contextUsed": 3391,
+          "ttftMs": 1025,
+          "tps": 82.3
+        },
+        {
+          "contextUsed": 6783,
+          "ttftMs": 6130,
+          "tps": 67.1
+        },
+        {
+          "contextUsed": 10175,
+          "ttftMs": 11222,
+          "tps": 55.3
+        },
+        {
+          "contextUsed": 13567,
+          "ttftMs": 16444,
+          "tps": 45.3
+        }
+      ]
+    }
+  ]
+}
