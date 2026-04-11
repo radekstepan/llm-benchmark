@@ -4,3 +4,4 @@ dist/
 *.log
 results/*.tmp
 .claude/
+dist-web/
