@@ -108,6 +108,55 @@
           "tps": 2.1
         }
       ]
+    },
+    {
+      "modelId": "qwen/qwen3.5-9b",
+      "hardwareFingerprint": "03f91fe0b9916b0d",
+      "hardwareInfo": {
+        "cpu": "Apple M1 Max",
+        "gpu": "Apple M1 Max",
+        "ramGb": 64
+      },
+      "maxContext": 13567,
+      "contextProbes": [
+        {
+          "contextSize": 17408,
+          "tps": 1.5619692164787666,
+          "passed": false
+        },
+        {
+          "contextSize": 9727,
+          "tps": 2.7938487676468893,
+          "passed": true
+        },
+        {
+          "contextSize": 13567,
+          "tps": 2.0075943870003137,
+          "passed": true
+        }
+      ],
+      "benchmarks": [
+        {
+          "contextUsed": 3391,
+          "ttftMs": 7234,
+          "tps": 7.1
+        },
+        {
+          "contextUsed": 6783,
+          "ttftMs": 14386,
+          "tps": 3.9
+        },
+        {
+          "contextUsed": 10175,
+          "ttftMs": 21800,
+          "tps": 2.7
+        },
+        {
+          "contextUsed": 13567,
+          "ttftMs": 29813,
+          "tps": 2
+        }
+      ]
     }
   ]
 }

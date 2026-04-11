@@ -18,9 +18,13 @@ const INFERENCE_TIMEOUT_MS = 60_000;
 const MIN_CONTEXT = 2048;
 const MAX_CONTEXT_GUESS = 32_768;
 const MIN_VIABLE_TPS = 2.0;
+/** Stop binary search when remaining range is smaller than this (tokens). */
+const CONTEXT_SEARCH_TOLERANCE = 4096;
 /** Use 95% of max context for the binary-search probe. */
 const CONTEXT_FILL_RATIO = 0.95;
 const BENCHMARK_FRACTIONS = [0.25, 0.5, 0.75, 1.0];
+/** Keep benchmark generation short for predictable runtimes. */
+const MAX_OUTPUT_TOKENS = 64;
 
 // ---------------------------------------------------------------------------
 // Custom error types
@@ -146,9 +150,9 @@ export async function runSingleTest(
         ttftMs = performance.now() - startTime;
         firstChunk = false;
       }
-      // Count delta tokens
-      const content = chunk.choices?.[0]?.delta?.content;
-      if (content) {
+      // Count delta tokens (include reasoning_content for thinking models)
+      const delta = chunk.choices?.[0]?.delta as Record<string, unknown> | undefined;
+      if (delta?.content || delta?.reasoning_content) {
         totalTokens += 1; // approximate; full token counting via tiktoken can happen post-hoc
       }
     }
@@ -224,6 +228,7 @@ export async function findMaxContext(
   const probes: ContextProbe[] = [];
 
   while (lo <= hi) {
+    if (hi - lo < CONTEXT_SEARCH_TOLERANCE) break;
     const mid = Math.floor((lo + hi) / 2);
     callbacks.onLog?.(`[Context Search] Probing ${mid} tokens...`);
     callbacks.onContextProbe?.(mid, 'load');
@@ -257,7 +262,7 @@ export async function findMaxContext(
     let result: TestResult | null = null;
     let inferenceOOM = false;
     try {
-      result = await runSingleTest(modelId, prompt, 64);
+      result = await runSingleTest(modelId, prompt, MAX_OUTPUT_TOKENS);
     } catch (err) {
       if (err instanceof InferenceOOMError || err instanceof TimeoutError) {
         inferenceOOM = true;
@@ -321,7 +326,7 @@ export async function benchmarkSpeeds(
 
     let testResult: TestResult | null = null;
     try {
-      testResult = await runSingleTest(modelId, prompt, 64);
+      testResult = await runSingleTest(modelId, prompt, MAX_OUTPUT_TOKENS);
     } catch (err) {
       callbacks.onLog?.(`[Speed Test] Failed at ${contextUsed} tokens: ${String(err)}`);
     }
