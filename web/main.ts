@@ -92,7 +92,7 @@ function getModelIds(device = selDevice) {
     DB.models
       .filter((e: any) => !device || e.hardwareFingerprint === device)
       .map((e: any) => e.modelId),
-  )];
+  )].sort((a, b) => a.localeCompare(b));
 }
 function shortModel(id: string) { return id.split('/').pop(); }
 function activeSeries() {
@@ -100,7 +100,8 @@ function activeSeries() {
   const models = getModelIds();
   return DB.models
     .filter((e: any) => e.hardwareFingerprint === selDevice && selModels.has(e.modelId))
-    .map((e: any) => ({ ...e, color: PALETTE[models.indexOf(e.modelId) % PALETTE.length] }));
+    .map((e: any) => ({ ...e, color: PALETTE[models.indexOf(e.modelId) % PALETTE.length] }))
+    .sort((a: any, b: any) => a.modelId.localeCompare(b.modelId));
 }
 
 // Toolbar
