@@ -53,6 +53,38 @@
           "tps": 1.5
         }
       ]
+    },
+    {
+      "modelId": "google/gemma-4-26b-a4b",
+      "hardwareFingerprint": "03f91fe0b9916b0d",
+      "hardwareInfo": {
+        "cpu": "Apple M1 Max",
+        "gpu": "Apple M1 Max",
+        "ramGb": 64
+      },
+      "maxContext": 21248,
+      "benchmarks": [
+        {
+          "contextUsed": 5312,
+          "ttftMs": 3610,
+          "tps": 48.1
+        },
+        {
+          "contextUsed": 10624,
+          "ttftMs": 13973,
+          "tps": 38.4
+        },
+        {
+          "contextUsed": 15936,
+          "ttftMs": 28244,
+          "tps": 25.3
+        },
+        {
+          "contextUsed": 21248,
+          "ttftMs": 46724,
+          "tps": 10
+        }
+      ]
     }
   ]
 }
