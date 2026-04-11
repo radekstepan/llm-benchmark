@@ -9,13 +9,14 @@ let DB: { models: any[] } = { models: [] };
 let selDevice: string | null = null;
 let selModels = new Set<string>();
 let initialized = false;  // Track if initial auto-selection has happened
-let hoveredCtx: any = null;
+let hoveredCtx: number | null = null;
+let hoveredModelId: string | null = null;
 let openMenu: 'device' | 'model' | null = null;
 let deviceQuery = '';
 let modelQuery  = '';
 
 // DOM helpers
-const $  = (id: string) => document.getElementById(id);
+const $ = <T extends Element = HTMLElement>(id: string) => document.getElementById(id) as unknown as T | null;
 const NS = 'http://www.w3.org/2000/svg';
 function se(tag: string, attrs: Record<string, string> = {}) {
   const e = document.createElementNS(NS, tag);
@@ -102,6 +103,48 @@ function activeSeries() {
     .filter((e: any) => e.hardwareFingerprint === selDevice && selModels.has(e.modelId))
     .map((e: any) => ({ ...e, color: PALETTE[models.indexOf(e.modelId) % PALETTE.length] }))
     .sort((a: any, b: any) => a.modelId.localeCompare(b.modelId));
+}
+
+function setHoveredModel(modelId: string | null) {
+  if (hoveredModelId === modelId) return;
+  hoveredModelId = modelId;
+  applyHoverState();
+}
+
+function bindHoverTarget(el: Element, modelId: string) {
+  el.setAttribute('data-hover-model', modelId);
+  el.addEventListener('mouseenter', () => setHoveredModel(modelId));
+  el.addEventListener('mouseleave', () => setHoveredModel(null));
+  el.addEventListener('focus', () => setHoveredModel(modelId));
+  el.addEventListener('blur', () => setHoveredModel(null));
+}
+
+function applyHoverState() {
+  const hasHover = hoveredModelId !== null;
+  for (const el of document.querySelectorAll('[data-hover-model]')) {
+    const isMatch = hoveredModelId !== null && el.getAttribute('data-hover-model') === hoveredModelId;
+    el.classList.toggle('is-active', isMatch);
+    el.classList.toggle('is-dimmed', hasHover && !isMatch);
+  }
+}
+
+function buildSummaryRow(s: any) {
+  const sorted = [...(s.benchmarks || [])].sort((a: any, b: any) => a.contextUsed - b.contextUsed);
+  if (!sorted.length) return null;
+
+  const bestTps = sorted.reduce((best: any, sample: any) => sample.tps > best.tps ? sample : best, sorted[0]);
+  const fastestTtft = sorted.reduce((best: any, sample: any) => sample.ttftMs < best.ttftMs ? sample : best, sorted[0]);
+
+  return {
+    short: shortModel(s.modelId),
+    maxContext: s.maxContext ? fK(s.maxContext) : '—',
+    maxContextHint: s.maxContext ? 'usable window' : 'not recorded',
+    peakTps: fTPS(bestTps.tps),
+    peakTpsContext: fK(bestTps.contextUsed),
+    bestTtft: fTTFT(fastestTtft.ttftMs),
+    bestTtftContext: fK(fastestTtft.contextUsed),
+    samples: String(sorted.length),
+  };
 }
 
 // Toolbar
@@ -342,7 +385,11 @@ function renderChart(svgEl: SVGSVGElement, opts: { series: any[]; yGet: (b: any)
   // Series
   for (const s of series) {
     const color = s.color;
-    const cg    = se('g', { 'clip-path':'url(#ch-clip)' });
+    const cg = se('g', {
+      'clip-path':'url(#ch-clip)',
+      class:'chart-series',
+      'data-hover-model': s.modelId,
+    });
 
     if (!s.benchmarks?.length) { svgEl.appendChild(cg); continue; }
 
@@ -359,14 +406,48 @@ function renderChart(svgEl: SVGSVGElement, opts: { series: any[]; yGet: (b: any)
     const areaD = splinePath(pts)
       + ` L${pts[pts.length-1].x.toFixed(1)},${(H-mg.b)}`
       + ` L${pts[0].x.toFixed(1)},${(H-mg.b)} Z`;
-    cg.appendChild(se('path', { d:areaD, fill:`url(#${gid})` }));
+    cg.appendChild(se('path', { d:areaD, fill:`url(#${gid})`, class:'series-area' }));
 
     // Line
-    cg.appendChild(se('path', { d:splinePath(pts), fill:'none', stroke:color, 'stroke-width':'2.5', 'stroke-linejoin':'round', 'stroke-linecap':'round' }));
+    const linePath = splinePath(pts);
+    cg.appendChild(se('path', {
+      d:linePath,
+      class:'series-line',
+      fill:'none',
+      stroke:color,
+      'stroke-width':'2.5',
+      'stroke-linejoin':'round',
+      'stroke-linecap':'round',
+    }));
+
+    const hitPath = se('path', {
+      d:linePath,
+      class:'series-hit',
+      fill:'none',
+      stroke:'transparent',
+      'stroke-width':'18',
+      'stroke-linejoin':'round',
+      'stroke-linecap':'round',
+      'pointer-events':'stroke',
+      cursor:'pointer',
+    });
+    hitPath.addEventListener('mouseenter', () => setHoveredModel(s.modelId));
+    hitPath.addEventListener('mousemove', (event) => onMove(event, s.modelId));
+    cg.appendChild(hitPath);
 
     // Dots
     for (const p of pts) {
-      cg.appendChild(se('circle', { cx:p.x.toFixed(1), cy:p.y.toFixed(1), r:'5', fill:'#fff', stroke:color, 'stroke-width':'2.5' }));
+      const dot = se('circle', {
+        cx:p.x.toFixed(1),
+        cy:p.y.toFixed(1),
+        r:'3',
+        fill:color,
+        class:'series-dot',
+        cursor:'pointer',
+      });
+      dot.addEventListener('mouseenter', () => setHoveredModel(s.modelId));
+      dot.addEventListener('mousemove', (event) => onMove(event, s.modelId));
+      cg.appendChild(dot);
     }
 
     svgEl.appendChild(cg);
@@ -382,12 +463,20 @@ function renderChart(svgEl: SVGSVGElement, opts: { series: any[]; yGet: (b: any)
   const hit = se('rect', { x:String(mg.l), y:String(mg.t), width:String(iw), height:String(ih), fill:'transparent', cursor:'crosshair' });
   svgEl.appendChild(hit);
 
-  const tip = $('tip');
+  const tip = $('tip') as HTMLDivElement | null;
 
-  function onMove(e: MouseEvent) {
+  function onMove(e: MouseEvent, modelId: string | null = null) {
     const r   = svgEl.getBoundingClientRect();
     const mx  = e.clientX - r.left;
-    if (mx < mg.l || mx > W - mg.r) { crossV.setAttribute('opacity','0'); hDots.innerHTML=''; (tip as HTMLElement).style.display='none'; return; }
+    if (!tip) return;
+    if (mx < mg.l || mx > W - mg.r) {
+      hoveredCtx = null;
+      setHoveredModel(null);
+      crossV.setAttribute('opacity','0');
+      hDots.innerHTML='';
+      tip.style.display='none';
+      return;
+    }
 
     // Find nearest context point
     let best: { s: any; b: any } | null = null, bestDist = Infinity;
@@ -397,7 +486,17 @@ function renderChart(svgEl: SVGSVGElement, opts: { series: any[]; yGet: (b: any)
         if (d < bestDist) { bestDist=d; best={s,b}; }
       }
     }
-    if (!best || bestDist > 60) { crossV.setAttribute('opacity','0'); hDots.innerHTML=''; (tip as HTMLElement).style.display='none'; return; }
+    if (!best || bestDist > 60) {
+      hoveredCtx = null;
+      if (!modelId) setHoveredModel(null);
+      crossV.setAttribute('opacity','0');
+      hDots.innerHTML='';
+      tip.style.display='none';
+      return;
+    }
+
+    hoveredCtx = best.b.contextUsed;
+    setHoveredModel(modelId);
 
     const bx = xp(best.b.contextUsed);
     crossV.setAttribute('x1', bx.toFixed(1));
@@ -411,67 +510,96 @@ function renderChart(svgEl: SVGSVGElement, opts: { series: any[]; yGet: (b: any)
       const match = (s.benchmarks||[]).find((b: any) => b.contextUsed===best!.b.contextUsed);
       if (!match) continue;
       const py = yp(yGet(match));
-      hDots.appendChild(se('circle', { cx:bx.toFixed(1), cy:py.toFixed(1), r:'6', fill:'#fff', stroke:s.color, 'stroke-width':'2.5' }));
+      hDots.appendChild(se('circle', {
+        cx:bx.toFixed(1),
+        cy:py.toFixed(1),
+        r: hoveredModelId === s.modelId ? '5' : '4',
+        fill:s.color,
+        class:'hover-dot',
+        'data-hover-model': s.modelId,
+      }));
       lines.push(`<span style="color:${s.color}">●</span> ${shortModel(s.modelId)}: ${yFmt(yGet(match))}`);
     }
-    (tip as HTMLElement).innerHTML = `<b>${fK(best.b.contextUsed)} tokens</b>` + lines.map(l=>`<br>${l}`).join('');
-    (tip as HTMLElement).style.display = '';
+    tip.innerHTML = `<b>${fK(best.b.contextUsed)} tokens</b>` + lines.map(l=>`<br>${l}`).join('');
+    tip.style.display = '';
 
     // Position tip
-    const tw = (tip as HTMLElement).offsetWidth, th = (tip as HTMLElement).offsetHeight;
+    const tw = tip.offsetWidth, th = tip.offsetHeight;
     let tx = e.clientX + 14, ty = e.clientY - th/2;
     if (tx + tw > window.innerWidth - 10) tx = e.clientX - tw - 14;
     if (ty < 8) ty = 8;
     if (ty + th > window.innerHeight - 8) ty = window.innerHeight - th - 8;
-    (tip as HTMLElement).style.left = tx + 'px';
-    (tip as HTMLElement).style.top  = ty + 'px';
+    tip.style.left = tx + 'px';
+    tip.style.top  = ty + 'px';
+    applyHoverState();
   }
 
-  hit.addEventListener('mousemove', onMove);
+  hit.addEventListener('mousemove', (event) => onMove(event, null));
   hit.addEventListener('mouseleave', () => {
+    hoveredCtx = null;
+    setHoveredModel(null);
     crossV.setAttribute('opacity','0');
     hDots.innerHTML='';
-    (tip as HTMLElement).style.display='none';
+    if (tip) tip.style.display='none';
   });
+
+  applyHoverState();
 }
 
 // Legend
 function renderLegend(legEl: HTMLElement, series: any[]) {
   legEl.innerHTML='';
   for (const s of series) {
-    const li = de('div','li');
+    const li = de('button','li legend-item') as HTMLButtonElement;
+    li.type = 'button';
     const sw = de('div','li-swatch'); (sw as HTMLElement).style.background=s.color;
     const dt = de('div','li-dot');   (dt as HTMLElement).style.background=s.color;
     li.append(sw, dt, document.createTextNode(' '+shortModel(s.modelId)));
+    bindHoverTarget(li, s.modelId);
     legEl.appendChild(li);
   }
 }
 
 // Stats
 function renderStats(series: any[]) {
-  const sg = $('sgrid');
-  if (!sg) return;
-  sg.innerHTML='';
+  const body = $('stats-body') as HTMLTableSectionElement | null;
+  if (!body) return;
+
+  body.innerHTML='';
+
+  if (selModels.size === 0) {
+    const tr = de('tr', 'table-empty');
+    tr.innerHTML = '<td colspan="6">No models selected. Use the selector above to compare results.</td>';
+    body.appendChild(tr);
+    return;
+  }
+
+  const rows: Array<{ s: any; summary: NonNullable<ReturnType<typeof buildSummaryRow>> }> = [];
   for (const s of series) {
-    const short  = shortModel(s.modelId);
-    const sorted = [...(s.benchmarks||[])].sort((a: any,b: any)=>a.contextUsed-b.contextUsed);
-    if (!sorted.length) continue;
+    const summary = buildSummaryRow(s);
+    if (!summary) continue;
+    rows.push({ s, summary });
+  }
 
-    const bestTps     = sorted.reduce((m: any,b: any)=>b.tps>m.tps?b:m, sorted[0]);
-    const fastestTtft = sorted.reduce((m: any,b: any)=>b.ttftMs<m.ttftMs?b:m, sorted[0]);
+  if (!rows.length) {
+    const tr = de('tr', 'table-empty');
+    tr.innerHTML = '<td colspan="6">No benchmark samples available for the current selection.</td>';
+    body.appendChild(tr);
+    return;
+  }
 
-    function card(label: string, val: string, unit: string, sub: string) {
-      const c = de('div','sc');
-      c.innerHTML = `<div class="sc-model" style="color:${s.color}">${short}</div>`
-        + `<div class="sc-label">${label}</div>`
-        + `<div class="sc-val">${val}<span class="sc-unit"> ${unit}</span></div>`
-        + `<div class="sc-sub">${sub}</div>`;
-      return c;
-    }
-
-    if (s.maxContext) sg.appendChild(card('Max context', fK(s.maxContext), 'tokens', 'usable window'));
-    sg.appendChild(card('Peak throughput', fTPS(bestTps.tps), 't/s', `at ${fK(bestTps.contextUsed)} tokens`));
-    sg.appendChild(card('Min latency', fTTFT(fastestTtft.ttftMs), '', `at ${fK(fastestTtft.contextUsed)} tokens`));
+  for (const { s, summary } of rows) {
+    const tr = de('tr', 'stats-row');
+    tr.tabIndex = 0;
+    tr.innerHTML = ''
+      + `<td class="model-col"><div class="model-chip"><span class="row-swatch" style="background:${s.color}"></span><span class="model-name">${summary.short}</span></div></td>`
+      + `<td><div class="metric-main">${summary.maxContext}</div><div class="metric-sub">${summary.maxContextHint}</div></td>`
+      + `<td><div class="metric-main">${summary.peakTps}<span class="metric-unit"> t/s</span></div><div class="metric-sub">at ${summary.peakTpsContext} tokens</div></td>`
+      + `<td><div class="metric-main">${summary.bestTtft}</div><div class="metric-sub">at ${summary.bestTtftContext} tokens</div></td>`
+      + `<td><div class="metric-main">${summary.samples}</div><div class="metric-sub">benchmarks captured</div></td>`
+      + `<td><div class="metric-pair"><span class="metric-pair-label">Span</span><span class="metric-pair-value">${summary.bestTtftContext} to ${summary.peakTpsContext}</span></div></td>`;
+    bindHoverTarget(tr, s.modelId);
+    body.appendChild(tr);
   }
 }
 
@@ -479,8 +607,8 @@ function renderStats(series: any[]) {
 function render() {
   const sa = activeSeries();
 
-  const tpsSvg = $('tps-svg') as SVGSVGElement;
-  const ttftSvg = $('ttft-svg') as SVGSVGElement;
+  const tpsSvg = $('tps-svg') as SVGSVGElement | null;
+  const ttftSvg = $('ttft-svg') as SVGSVGElement | null;
   const tpsLeg = $('tps-leg');
   const ttftLeg = $('ttft-leg');
 
@@ -489,6 +617,7 @@ function render() {
   if (tpsLeg) renderLegend(tpsLeg,  sa);
   if (ttftLeg) renderLegend(ttftLeg, sa);
   renderStats(sa);
+  applyHoverState();
 }
 
 // Boot
@@ -511,7 +640,7 @@ async function boot() {
 }
 
 // Re-render on resize
-const tpsSvg = $('tps-svg');
+const tpsSvg = $('tps-svg') as SVGSVGElement | null;
 if (tpsSvg) {
   const ro = new ResizeObserver(() => render());
   ro.observe(tpsSvg);

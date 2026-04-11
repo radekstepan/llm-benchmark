@@ -52,7 +52,29 @@
       <div class="legend" id="ttft-leg"></div>
     </div>
   </div>
-  <div class="sgrid" id="sgrid"></div>
+  <section class="table-card" aria-labelledby="summary-title">
+    <div class="table-head">
+      <div>
+        <h2 class="table-title" id="summary-title">Model Snapshot</h2>
+        <p class="table-copy">A compact comparison of context ceiling, peak throughput, and best first-token latency.</p>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="stats-table">
+        <thead>
+          <tr>
+            <th scope="col">Model</th>
+            <th scope="col">Max context</th>
+            <th scope="col">Peak throughput</th>
+            <th scope="col">Best TTFT</th>
+            <th scope="col">Samples</th>
+            <th scope="col">Key window</th>
+          </tr>
+        </thead>
+        <tbody id="stats-body"></tbody>
+      </table>
+    </div>
+  </section>
 </main>
 
 <div id="tip" style="display:none"></div>
