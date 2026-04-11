@@ -20,11 +20,9 @@ const MAX_CONTEXT_GUESS = 32_768;
 const MIN_VIABLE_TPS = 2.0;
 /** Stop binary search when remaining range is smaller than this (tokens). */
 const CONTEXT_SEARCH_TOLERANCE = 4096;
-/** Use 95% of max context for the binary-search probe. */
-const CONTEXT_FILL_RATIO = 0.95;
 const BENCHMARK_FRACTIONS = [0.25, 0.5, 0.75, 1.0];
-/** Keep benchmark generation short for predictable runtimes. */
-const MAX_OUTPUT_TOKENS = 64;
+const EXPECTED_OUTPUT_TOKENS = 2500; // Your generous Thinking + Answer budget
+const SYSTEM_PROMPT_TOKENS = 500;
 
 // ---------------------------------------------------------------------------
 // Custom error types
@@ -255,14 +253,25 @@ export async function findMaxContext(
       continue;
     }
 
+    // 1. Calculate how much room is actually left for the transcript
+    const transcriptRoom = mid - EXPECTED_OUTPUT_TOKENS - SYSTEM_PROMPT_TOKENS;
+
+    if (transcriptRoom <= 0) {
+      // If the context is so small we can't even fit the output, fail it.
+      callbacks.onContextProbe?.(mid, 'oom');
+      probes.push({ contextSize: mid, tps: null, passed: false });
+      hi = mid - 1;
+      continue;
+    }
+
     callbacks.onContextProbe?.(mid, 'test');
-    const targetTokens = Math.floor(mid * CONTEXT_FILL_RATIO);
-    const prompt = generateDummyPrompt(targetTokens);
+    const prompt = generateDummyPrompt(transcriptRoom);
+    const forcedRamblePrompt = prompt + "\n\nCRITICAL INSTRUCTION: Write a highly detailed, 2,500-word essay analyzing the text above. Do not stop until you have written at least 2,500 words.";
 
     let result: TestResult | null = null;
     let inferenceOOM = false;
     try {
-      result = await runSingleTest(modelId, prompt, MAX_OUTPUT_TOKENS);
+      result = await runSingleTest(modelId, forcedRamblePrompt, EXPECTED_OUTPUT_TOKENS);
     } catch (err) {
       if (err instanceof InferenceOOMError || err instanceof TimeoutError) {
         inferenceOOM = true;
@@ -321,14 +330,20 @@ export async function benchmarkSpeeds(
       continue;
     }
 
-    const targetTokens = Math.floor(contextUsed * CONTEXT_FILL_RATIO);
-    const prompt = generateDummyPrompt(targetTokens);
+    const transcriptRoom = contextUsed - EXPECTED_OUTPUT_TOKENS - SYSTEM_PROMPT_TOKENS;
 
     let testResult: TestResult | null = null;
-    try {
-      testResult = await runSingleTest(modelId, prompt, MAX_OUTPUT_TOKENS);
-    } catch (err) {
-      callbacks.onLog?.(`[Speed Test] Failed at ${contextUsed} tokens: ${String(err)}`);
+    if (transcriptRoom > 0) {
+      const prompt = generateDummyPrompt(transcriptRoom);
+      const forcedRamblePrompt = prompt + "\n\nCRITICAL INSTRUCTION: Write a highly detailed, 2,500-word essay analyzing the text above. Do not stop until you have written at least 2,500 words.";
+
+      try {
+        testResult = await runSingleTest(modelId, forcedRamblePrompt, EXPECTED_OUTPUT_TOKENS);
+      } catch (err) {
+        callbacks.onLog?.(`[Speed Test] Failed at ${contextUsed} tokens: ${String(err)}`);
+      }
+    } else {
+      callbacks.onLog?.(`[Speed Test] Skipped at ${contextUsed} tokens: Not enough room for output`);
     }
 
     if (testResult) {

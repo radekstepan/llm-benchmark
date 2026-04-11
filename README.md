@@ -20,22 +20,22 @@ A CLI tool that benchmarks local LLMs running via [LM Studio](https://lmstudio.a
 ## Installation
 
 ```bash
-npm install
-npm run build
+yarn install
+yarn build
 ```
 
 You can then run it directly:
 
 ```bash
-node dist/index.js
+yarn start
 # or via the bin alias:
-npx llm-benchmark
+yarn llm-benchmark
 ```
 
 During development you can build + run in one step:
 
 ```bash
-npm run dev
+yarn dev
 ```
 
 ## Usage
@@ -130,9 +130,11 @@ src/
 
 | Script | Description |
 |---|---|
-| `npm run build` | Compile TypeScript to `dist/` |
-| `npm run start` | Run the compiled build |
-| `npm run dev` | Build then run immediately |
+| `yarn build` | Compile TypeScript to `dist/` |
+| `yarn start` | Run the compiled build (CLI) |
+| `yarn bench` | Run the benchmark utility |
+| `yarn server` | Run the results server |
+| `yarn dev` | Build then run immediately |
 
 ## Dependencies
 
