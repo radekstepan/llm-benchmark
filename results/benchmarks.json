@@ -117,6 +117,38 @@
           "tps": 6.9
         }
       ]
+    },
+    {
+      "modelId": "qwen/qwen3.5-9b",
+      "hardwareFingerprint": "c1f9f37e9dd125f4",
+      "hardwareInfo": {
+        "cpu": "AMD Ryzen 5 5500",
+        "gpu": "GA106 [GeForce RTX 3060 Lite Hash Rate]",
+        "ramGb": 31
+      },
+      "maxContext": 28928,
+      "benchmarks": [
+        {
+          "contextUsed": 7232,
+          "ttftMs": 3214,
+          "tps": 45.9
+        },
+        {
+          "contextUsed": 14464,
+          "ttftMs": 8376,
+          "tps": 40.4
+        },
+        {
+          "contextUsed": 21696,
+          "ttftMs": 13897,
+          "tps": 35.2
+        },
+        {
+          "contextUsed": 28928,
+          "ttftMs": 19640,
+          "tps": 29.9
+        }
+      ]
     }
   ]
 }
