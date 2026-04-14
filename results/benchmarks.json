@@ -9,27 +9,27 @@
         "ramGb": 64,
         "gpuVram": 0
       },
-      "maxContext": 32288,
+      "maxContext": 31808,
       "benchmarks": [
         {
-          "contextUsed": 8072,
-          "ttftMs": 9277,
-          "tps": 55.8
+          "contextUsed": 7952,
+          "ttftMs": 8746,
+          "tps": 57.2
         },
         {
-          "contextUsed": 16144,
-          "ttftMs": 20427,
-          "tps": 41.9
+          "contextUsed": 15904,
+          "ttftMs": 19592,
+          "tps": 45
         },
         {
-          "contextUsed": 24216,
-          "ttftMs": 34448,
-          "tps": 30.5
+          "contextUsed": 23856,
+          "ttftMs": 32198,
+          "tps": 34.1
         },
         {
-          "contextUsed": 32288,
-          "ttftMs": 49775,
-          "tps": 26.2
+          "contextUsed": 31808,
+          "ttftMs": 45338,
+          "tps": 26.4
         }
       ]
     },
