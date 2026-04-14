@@ -218,6 +218,39 @@
           "tps": 17.6
         }
       ]
+    },
+    {
+      "modelId": "mistralai/devstral-small-2-2512",
+      "hardwareFingerprint": "03f91fe0b9916b0d",
+      "hardwareInfo": {
+        "cpu": "Apple M1 Max",
+        "gpu": "Apple M1 Max",
+        "ramGb": 64,
+        "gpuVram": 0
+      },
+      "maxContext": 10207,
+      "benchmarks": [
+        {
+          "contextUsed": 2551,
+          "ttftMs": 16307,
+          "tps": 5.1
+        },
+        {
+          "contextUsed": 5103,
+          "ttftMs": 16631,
+          "tps": 3.2
+        },
+        {
+          "contextUsed": 7655,
+          "ttftMs": 16992,
+          "tps": 3
+        },
+        {
+          "contextUsed": 10207,
+          "ttftMs": 17391,
+          "tps": 2.9
+        }
+      ]
     }
   ]
 }
