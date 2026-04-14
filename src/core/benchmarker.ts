@@ -14,7 +14,9 @@ import {
 
 const LMS_BASE_URL = 'http://localhost:1234/v1';
 const WARMUP_TOKENS = 10;
-const INFERENCE_TIMEOUT_MS = 60_000;
+const INFERENCE_BASE_TIMEOUT_MS = 120_000;
+/** Extra timeout per 1k context tokens to account for quadratic TTFT growth. */
+const INFERENCE_TIMEOUT_PER_1K_CONTEXT_MS = 5_000;
 const MIN_CONTEXT = 2048;
 const MAX_CONTEXT_GUESS = 32_768;
 const MIN_VIABLE_TPS = 2.0;
@@ -23,6 +25,8 @@ const CONTEXT_SEARCH_TOLERANCE = 4096;
 const BENCHMARK_FRACTIONS = [0.25, 0.5, 0.75, 1.0];
 const EXPECTED_OUTPUT_TOKENS = 2500; // Your generous Thinking + Answer budget
 const SYSTEM_PROMPT_TOKENS = 500;
+/** Extra headroom for chat template overhead, instruction suffix, tokenizer mismatch. */
+const PROMPT_OVERHEAD_TOKENS = 256;
 
 /** Tokens to generate during context probes (keep small to avoid timeouts). */
 const PROBE_OUTPUT_TOKENS = 50;
@@ -188,14 +192,16 @@ export async function runSingleTest(
   modelId: string,
   promptText: string,
   expectedMaxTokens: number,
+  timeoutMs?: number,
 ): Promise<TestResult> {
   const client = new OpenAI({
     baseURL: LMS_BASE_URL,
     apiKey: 'lm-studio',
   });
 
+  const effectiveTimeout = timeoutMs ?? INFERENCE_BASE_TIMEOUT_MS;
   const abortController = new AbortController();
-  const timeout = setTimeout(() => abortController.abort(), INFERENCE_TIMEOUT_MS);
+  const timeout = setTimeout(() => abortController.abort(), effectiveTimeout);
 
   // ----- Warm-up run (discard result) -----
   try {
@@ -422,15 +428,16 @@ export async function benchmarkSpeeds(
       EXPECTED_OUTPUT_TOKENS,
       Math.max(100, Math.floor(contextUsed * 0.2)),
     );
-    const transcriptRoom = contextUsed - maxOutputTokens - SYSTEM_PROMPT_TOKENS;
+    const transcriptRoom = contextUsed - maxOutputTokens - SYSTEM_PROMPT_TOKENS - PROMPT_OVERHEAD_TOKENS;
 
     let testResult: TestResult | null = null;
     if (transcriptRoom > 0) {
       const prompt = generateDummyPrompt(transcriptRoom);
       const forcedRamblePrompt = prompt + `\n\nCRITICAL INSTRUCTION: Write a highly detailed essay analyzing the text above. Do not stop until you have written at least ${Math.round(maxOutputTokens * 0.75)} words.`;
 
+      const timeoutMs = INFERENCE_BASE_TIMEOUT_MS + Math.ceil(contextUsed / 1024) * INFERENCE_TIMEOUT_PER_1K_CONTEXT_MS;
       try {
-        testResult = await runSingleTest(modelId, forcedRamblePrompt, maxOutputTokens);
+        testResult = await runSingleTest(modelId, forcedRamblePrompt, maxOutputTokens, timeoutMs);
       } catch (err) {
         callbacks.onLog?.(`[Speed Test] Failed at ${contextUsed} tokens: ${String(err)}`);
       }
@@ -438,7 +445,7 @@ export async function benchmarkSpeeds(
       callbacks.onLog?.(`[Speed Test] Skipped at ${contextUsed} tokens: Not enough room for output`);
     }
 
-    if (testResult) {
+    if (testResult && testResult.totalTokens > 0) {
       callbacks.onSpeedTest?.(fraction, testResult);
       results.push({
         contextUsed,
