@@ -21,7 +21,7 @@ const MIN_CONTEXT = 2048;
 const MAX_CONTEXT_GUESS = 32_768;
 const MIN_VIABLE_TPS = 2.0;
 /** Stop binary search when remaining range is smaller than this (tokens). */
-const CONTEXT_SEARCH_TOLERANCE = 4096;
+const CONTEXT_SEARCH_TOLERANCE = 512;
 const BENCHMARK_FRACTIONS = [0.25, 0.5, 0.75, 1.0];
 const EXPECTED_OUTPUT_TOKENS = 2500; // Your generous Thinking + Answer budget
 const SYSTEM_PROMPT_TOKENS = 500;
@@ -326,20 +326,20 @@ export async function findMaxContext(
 
     // Unload then load at new context size
     await unloadAll();
+    // Add a 1 second delay to ensure VRAM is garbage collected by the OS
+    await new Promise(r => setTimeout(r, 1000));
 
-    let loadOOM = false;
+    let loadFailed = false;
     try {
       await loadModel(modelId, mid);
     } catch (err) {
-      if (err instanceof ModelLoadOOMError) {
-        loadOOM = true;
-      } else {
-        throw err;
-      }
+      // Treat ANY load failure (OOM, architecture context limit, generic error)
+      // as a failed probe so we binary search downwards instead of crashing.
+      loadFailed = true;
+      callbacks.onLog?.(`[Context Search] Load failed at ${mid}, reducing...`);
     }
 
-    if (loadOOM) {
-      callbacks.onLog?.(`[Context Search] OOM on load at ${mid}, reducing...`);
+    if (loadFailed) {
       callbacks.onContextProbe?.(mid, 'oom');
       probes.push({ contextSize: mid, tps: null, passed: false });
       hi = mid - 1;
@@ -347,7 +347,7 @@ export async function findMaxContext(
     }
 
     // 1. Calculate how much room is actually left for the transcript
-    const transcriptRoom = mid - PROBE_OUTPUT_TOKENS - SYSTEM_PROMPT_TOKENS;
+    const transcriptRoom = mid - PROBE_OUTPUT_TOKENS - SYSTEM_PROMPT_TOKENS - PROMPT_OVERHEAD_TOKENS;
 
     if (transcriptRoom <= 0) {
       // If the context is so small we can't even fit the output, fail it.
@@ -361,22 +361,19 @@ export async function findMaxContext(
     const prompt = generateDummyPrompt(transcriptRoom);
 
     let result: TestResult | null = null;
-    let inferenceOOM = false;
+    let inferenceFailed = false;
     try {
       result = await probeContext(modelId, prompt);
     } catch (err) {
-      if (err instanceof InferenceOOMError || err instanceof TimeoutError) {
-        inferenceOOM = true;
-      } else {
-        throw err;
-      }
+      // Catch any inference failure to gracefully search downwards
+      inferenceFailed = true;
     }
 
-    if (inferenceOOM || (result !== null && result.tps < MIN_VIABLE_TPS)) {
-      const reason = inferenceOOM ? 'OOM during inference' : `TPS too low (${result!.tps.toFixed(1)})`;
+    if (inferenceFailed || (result !== null && result.tps < MIN_VIABLE_TPS)) {
+      const reason = inferenceFailed ? 'Failed during inference' : `TPS too low (${result!.tps.toFixed(1)})`;
       callbacks.onLog?.(`[Context Search] Failed at ${mid}: ${reason}, reducing...`);
       callbacks.onContextProbe?.(mid, 'oom');
-      probes.push({ contextSize: mid, tps: inferenceOOM ? null : result!.tps, passed: false });
+      probes.push({ contextSize: mid, tps: inferenceFailed ? null : result!.tps, passed: false });
       hi = mid - 1;
     } else {
       callbacks.onLog?.(`[Context Search] Success at ${mid} (TPS: ${result!.tps.toFixed(1)})`);
@@ -406,55 +403,74 @@ export async function benchmarkSpeeds(
 
   for (const fraction of BENCHMARK_FRACTIONS) {
     const contextUsed = Math.max(
-      MIN_CONTEXT,
+      256,
       Math.floor(actualMaxContext * fraction),
     );
     callbacks.onLog?.(`[Speed Test] Testing at ${Math.round(fraction * 100)}% context (${contextUsed} tokens)...`);
     callbacks.onSpeedTest?.(fraction, null);
 
-    // Reload the model at the correct context size for this test fraction.
-    // This also allows the server to recover from any prior OOM state.
-    await unloadAll();
-    try {
-      await loadModel(modelId, contextUsed);
-    } catch (err) {
-      callbacks.onLog?.(`[Speed Test] Load failed at ${contextUsed} tokens: ${String(err)}`);
-      continue;
-    }
-
-    // Scale output budget to fit within available context.
-    // Reserve at least 20% for output (min 100 tokens), rest for prompt.
     const maxOutputTokens = Math.min(
       EXPECTED_OUTPUT_TOKENS,
       Math.max(100, Math.floor(contextUsed * 0.2)),
     );
     const transcriptRoom = contextUsed - maxOutputTokens - SYSTEM_PROMPT_TOKENS - PROMPT_OVERHEAD_TOKENS;
 
-    let testResult: TestResult | null = null;
-    if (transcriptRoom > 0) {
-      const prompt = generateDummyPrompt(transcriptRoom);
-      const forcedRamblePrompt = prompt + `\n\nCRITICAL INSTRUCTION: Write a highly detailed essay analyzing the text above. Do not stop until you have written at least ${Math.round(maxOutputTokens * 0.75)} words.`;
+    if (transcriptRoom <= 0) {
+      callbacks.onLog?.(`[Speed Test] Skipped at ${contextUsed} tokens: Not enough room for output`);
+      continue;
+    }
 
-      const timeoutMs = INFERENCE_BASE_TIMEOUT_MS + Math.ceil(contextUsed / 1024) * INFERENCE_TIMEOUT_PER_1K_CONTEXT_MS;
+    const prompt = generateDummyPrompt(transcriptRoom);
+    const forcedRamblePrompt = prompt + `\n\nCRITICAL INSTRUCTION: Write a highly detailed essay analyzing the text above. Do not stop until you have written at least ${Math.round(maxOutputTokens * 0.75)} words.`;
+
+    const timeoutMs = INFERENCE_BASE_TIMEOUT_MS + Math.ceil(contextUsed / 1024) * INFERENCE_TIMEOUT_PER_1K_CONTEXT_MS;
+
+    let success = false;
+    const maxAttempts = 3;
+
+    // Retry loop to guarantee we get our data point even if VRAM is lagging
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      if (attempt > 1) {
+        callbacks.onLog?.(`[Speed Test] Retrying ${contextUsed} tokens (Attempt ${attempt}/${maxAttempts})...`);
+        await new Promise(r => setTimeout(r, 2000));
+      }
+
+      // Unload, then wait 1 second for OS to actually clear GPU memory
+      await unloadAll();
+      await new Promise(r => setTimeout(r, 1000));
+
+      try {
+        await loadModel(modelId, contextUsed);
+      } catch (err) {
+        callbacks.onLog?.(`[Speed Test] Load failed at ${contextUsed}: ${String(err)}`);
+        continue; // Trigger next attempt in loop
+      }
+
+      let testResult: TestResult | null = null;
       try {
         testResult = await runSingleTest(modelId, forcedRamblePrompt, maxOutputTokens, timeoutMs);
       } catch (err) {
-        callbacks.onLog?.(`[Speed Test] Failed at ${contextUsed} tokens: ${String(err)}`);
+        callbacks.onLog?.(`[Speed Test] Run failed at ${contextUsed}: ${String(err)}`);
+        continue; // Trigger next attempt in loop
       }
-    } else {
-      callbacks.onLog?.(`[Speed Test] Skipped at ${contextUsed} tokens: Not enough room for output`);
+
+      if (testResult && testResult.totalTokens > 0) {
+        success = true;
+        callbacks.onSpeedTest?.(fraction, testResult);
+        results.push({
+          contextUsed,
+          ttftMs: Math.round(testResult.ttftMs),
+          tps: Math.round(testResult.tps * 10) / 10,
+        });
+        callbacks.onLog?.(
+          `[Speed Test] ${contextUsed} tokens → TTFT: ${Math.round(testResult.ttftMs)}ms, TPS: ${testResult.tps.toFixed(1)}`,
+        );
+        break; // Success! Break out of the retry loop.
+      }
     }
 
-    if (testResult && testResult.totalTokens > 0) {
-      callbacks.onSpeedTest?.(fraction, testResult);
-      results.push({
-        contextUsed,
-        ttftMs: Math.round(testResult.ttftMs),
-        tps: Math.round(testResult.tps * 10) / 10,
-      });
-      callbacks.onLog?.(
-        `[Speed Test] ${contextUsed} tokens → TTFT: ${Math.round(testResult.ttftMs)}ms, TPS: ${testResult.tps.toFixed(1)}`,
-      );
+    if (!success) {
+      callbacks.onLog?.(`[Speed Test] FATAL: Could not complete benchmark for ${contextUsed} tokens after ${maxAttempts} attempts.`);
     }
   }
 

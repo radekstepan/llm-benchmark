@@ -6,29 +6,30 @@
       "hardwareInfo": {
         "cpu": "Apple M1 Max",
         "gpu": "Apple M1 Max",
-        "ramGb": 64
+        "ramGb": 64,
+        "gpuVram": 0
       },
-      "maxContext": 13567,
+      "maxContext": 32288,
       "benchmarks": [
         {
-          "contextUsed": 3391,
-          "ttftMs": 1025,
-          "tps": 82.3
+          "contextUsed": 8072,
+          "ttftMs": 9277,
+          "tps": 55.8
         },
         {
-          "contextUsed": 6783,
-          "ttftMs": 6130,
-          "tps": 67.1
+          "contextUsed": 16144,
+          "ttftMs": 20427,
+          "tps": 41.9
         },
         {
-          "contextUsed": 10175,
-          "ttftMs": 11222,
-          "tps": 55.3
+          "contextUsed": 24216,
+          "ttftMs": 34448,
+          "tps": 30.5
         },
         {
-          "contextUsed": 13567,
-          "ttftMs": 16444,
-          "tps": 45.3
+          "contextUsed": 32288,
+          "ttftMs": 49775,
+          "tps": 26.2
         }
       ]
     },

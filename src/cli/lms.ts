@@ -133,7 +133,9 @@ export async function loadModel(
     if (
       stderr.includes('out of memory') ||
       stderr.includes('oom') ||
-      stderr.includes('allocation failed')
+      stderr.includes('allocation failed') ||
+      stderr.includes('failed to allocate') ||
+      stderr.includes('not enough memory')
     ) {
       throw new ModelLoadOOMError(modelId);
     }
