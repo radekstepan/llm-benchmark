@@ -149,6 +149,39 @@
           "tps": 29.9
         }
       ]
+    },
+    {
+      "modelId": "qwen3.5-27b-claude-4.6-opus-distilled-mlx",
+      "hardwareFingerprint": "03f91fe0b9916b0d",
+      "hardwareInfo": {
+        "cpu": "Apple M1 Max",
+        "gpu": "Apple M1 Max",
+        "ramGb": 64,
+        "gpuVram": 0
+      },
+      "maxContext": 5887,
+      "benchmarks": [
+        {
+          "contextUsed": 2048,
+          "ttftMs": 13650,
+          "tps": 10.6
+        },
+        {
+          "contextUsed": 2943,
+          "ttftMs": 21641,
+          "tps": 10
+        },
+        {
+          "contextUsed": 4415,
+          "ttftMs": 34858,
+          "tps": 6.3
+        },
+        {
+          "contextUsed": 5887,
+          "ttftMs": 47809,
+          "tps": 3
+        }
+      ]
     }
   ]
 }

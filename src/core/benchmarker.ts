@@ -24,6 +24,11 @@ const BENCHMARK_FRACTIONS = [0.25, 0.5, 0.75, 1.0];
 const EXPECTED_OUTPUT_TOKENS = 2500; // Your generous Thinking + Answer budget
 const SYSTEM_PROMPT_TOKENS = 500;
 
+/** Tokens to generate during context probes (keep small to avoid timeouts). */
+const PROBE_OUTPUT_TOKENS = 50;
+/** Timeout for context probes (seconds). */
+const PROBE_TIMEOUT_MS = 90_000;
+
 // ---------------------------------------------------------------------------
 // Custom error types
 // ---------------------------------------------------------------------------
@@ -81,6 +86,88 @@ export function generateDummyPrompt(targetTokens: number): string {
   }
   enc2.free();
   return full.slice(0, lo);
+}
+
+// ---------------------------------------------------------------------------
+// Lightweight context probe (for binary search only)
+// ---------------------------------------------------------------------------
+
+/**
+ * Quick inference check: fill context with a prompt, generate a few tokens.
+ * No warmup, small output — just verifies the model can run at this context.
+ */
+async function probeContext(
+  modelId: string,
+  promptText: string,
+): Promise<TestResult> {
+  const client = new OpenAI({
+    baseURL: LMS_BASE_URL,
+    apiKey: 'lm-studio',
+  });
+
+  const abortController = new AbortController();
+  const timeout = setTimeout(() => abortController.abort(), PROBE_TIMEOUT_MS);
+
+  const startTime = performance.now();
+  let ttftMs = 0;
+  let totalTokens = 0;
+
+  try {
+    const stream = await client.chat.completions.create(
+      {
+        model: modelId,
+        messages: [{ role: 'user', content: promptText }],
+        max_tokens: PROBE_OUTPUT_TOKENS,
+        stream: true,
+      },
+      { signal: abortController.signal },
+    );
+
+    let firstChunk = true;
+    for await (const chunk of stream) {
+      if (firstChunk) {
+        ttftMs = performance.now() - startTime;
+        firstChunk = false;
+      }
+      const delta = chunk.choices?.[0]?.delta as Record<string, unknown> | undefined;
+      if (delta?.content || delta?.reasoning_content) {
+        totalTokens += 1;
+      }
+    }
+  } catch (err: unknown) {
+    const e = err as { name?: string; message?: string; code?: string };
+    if (
+      e.name === 'AbortError' ||
+      (e.message ?? '').includes('abort')
+    ) {
+      throw new TimeoutError();
+    }
+    const msg = (e.message ?? '').toLowerCase();
+    const code = (e.code ?? '').toLowerCase();
+    if (
+      msg.includes('connection reset') ||
+      msg.includes('econnreset') ||
+      code === 'econnreset' ||
+      msg.includes('socket hang up') ||
+      msg.includes('oom') ||
+      msg.includes('out of memory') ||
+      msg.includes('tokens to keep from the initial prompt')
+    ) {
+      throw new InferenceOOMError();
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  const endTime = performance.now();
+  // Measure generation speed excluding TTFT — with only ~50 output tokens,
+  // TTFT would dominate and make TPS artificially low.
+  const generationMs = endTime - startTime - ttftMs;
+  const generationSeconds = generationMs / 1000;
+  const tps = generationSeconds > 0 ? totalTokens / generationSeconds : 0;
+
+  return { ttftMs, tps, totalTokens };
 }
 
 // ---------------------------------------------------------------------------
@@ -254,7 +341,7 @@ export async function findMaxContext(
     }
 
     // 1. Calculate how much room is actually left for the transcript
-    const transcriptRoom = mid - EXPECTED_OUTPUT_TOKENS - SYSTEM_PROMPT_TOKENS;
+    const transcriptRoom = mid - PROBE_OUTPUT_TOKENS - SYSTEM_PROMPT_TOKENS;
 
     if (transcriptRoom <= 0) {
       // If the context is so small we can't even fit the output, fail it.
@@ -266,12 +353,11 @@ export async function findMaxContext(
 
     callbacks.onContextProbe?.(mid, 'test');
     const prompt = generateDummyPrompt(transcriptRoom);
-    const forcedRamblePrompt = prompt + "\n\nCRITICAL INSTRUCTION: Write a highly detailed, 2,500-word essay analyzing the text above. Do not stop until you have written at least 2,500 words.";
 
     let result: TestResult | null = null;
     let inferenceOOM = false;
     try {
-      result = await runSingleTest(modelId, forcedRamblePrompt, EXPECTED_OUTPUT_TOKENS);
+      result = await probeContext(modelId, prompt);
     } catch (err) {
       if (err instanceof InferenceOOMError || err instanceof TimeoutError) {
         inferenceOOM = true;
@@ -330,15 +416,21 @@ export async function benchmarkSpeeds(
       continue;
     }
 
-    const transcriptRoom = contextUsed - EXPECTED_OUTPUT_TOKENS - SYSTEM_PROMPT_TOKENS;
+    // Scale output budget to fit within available context.
+    // Reserve at least 20% for output (min 100 tokens), rest for prompt.
+    const maxOutputTokens = Math.min(
+      EXPECTED_OUTPUT_TOKENS,
+      Math.max(100, Math.floor(contextUsed * 0.2)),
+    );
+    const transcriptRoom = contextUsed - maxOutputTokens - SYSTEM_PROMPT_TOKENS;
 
     let testResult: TestResult | null = null;
     if (transcriptRoom > 0) {
       const prompt = generateDummyPrompt(transcriptRoom);
-      const forcedRamblePrompt = prompt + "\n\nCRITICAL INSTRUCTION: Write a highly detailed, 2,500-word essay analyzing the text above. Do not stop until you have written at least 2,500 words.";
+      const forcedRamblePrompt = prompt + `\n\nCRITICAL INSTRUCTION: Write a highly detailed essay analyzing the text above. Do not stop until you have written at least ${Math.round(maxOutputTokens * 0.75)} words.`;
 
       try {
-        testResult = await runSingleTest(modelId, forcedRamblePrompt, EXPECTED_OUTPUT_TOKENS);
+        testResult = await runSingleTest(modelId, forcedRamblePrompt, maxOutputTokens);
       } catch (err) {
         callbacks.onLog?.(`[Speed Test] Failed at ${contextUsed} tokens: ${String(err)}`);
       }
