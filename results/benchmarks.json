@@ -79,23 +79,23 @@
       "benchmarks": [
         {
           "contextUsed": 7112,
-          "ttftMs": 8291,
-          "tps": 39.3
+          "ttftMs": 8404,
+          "tps": 39.6
         },
         {
           "contextUsed": 14224,
-          "ttftMs": 22635,
-          "tps": 33.6
+          "ttftMs": 22402,
+          "tps": 34
         },
         {
           "contextUsed": 21336,
-          "ttftMs": 45716,
-          "tps": 25
+          "ttftMs": 46203,
+          "tps": 24.8
         },
         {
           "contextUsed": 28448,
-          "ttftMs": 77592,
-          "tps": 18.5
+          "ttftMs": 76680,
+          "tps": 18.6
         }
       ]
     },
