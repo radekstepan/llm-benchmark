@@ -185,6 +185,39 @@
           "tps": 9.4
         }
       ]
+    },
+    {
+      "modelId": "zai-org/glm-4.7-flash",
+      "hardwareFingerprint": "03f91fe0b9916b0d",
+      "hardwareInfo": {
+        "cpu": "Apple M1 Max",
+        "gpu": "Apple M1 Max",
+        "ramGb": 64,
+        "gpuVram": 0
+      },
+      "maxContext": 25568,
+      "benchmarks": [
+        {
+          "contextUsed": 6392,
+          "ttftMs": 10920,
+          "tps": 24.3
+        },
+        {
+          "contextUsed": 12784,
+          "ttftMs": 15362,
+          "tps": 23.7
+        },
+        {
+          "contextUsed": 19176,
+          "ttftMs": 23367,
+          "tps": 19.9
+        },
+        {
+          "contextUsed": 25568,
+          "ttftMs": 29138,
+          "tps": 17.6
+        }
+      ]
     }
   ]
 }

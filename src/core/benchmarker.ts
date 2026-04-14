@@ -117,10 +117,10 @@ async function probeContext(
   let totalTokens = 0;
 
   try {
-    const stream = await client.chat.completions.create(
+    const stream = await client.completions.create(
       {
         model: modelId,
-        messages: [{ role: 'user', content: promptText }],
+        prompt: promptText,
         max_tokens: PROBE_OUTPUT_TOKENS,
         stream: true,
       },
@@ -133,8 +133,8 @@ async function probeContext(
         ttftMs = performance.now() - startTime;
         firstChunk = false;
       }
-      const delta = chunk.choices?.[0]?.delta as Record<string, unknown> | undefined;
-      if (delta?.content || delta?.reasoning_content) {
+      // Use raw text completions
+      if (chunk.choices?.[0]?.text) {
         totalTokens += 1;
       }
     }
@@ -206,10 +206,10 @@ export async function runSingleTest(
   // ----- Warm-up run (discard result) -----
   try {
     const warmupPrompt = generateDummyPrompt(WARMUP_TOKENS);
-    await client.chat.completions.create(
+    await client.completions.create(
       {
         model: modelId,
-        messages: [{ role: 'user', content: warmupPrompt }],
+        prompt: warmupPrompt,
         max_tokens: 5,
         stream: false,
       },
@@ -225,10 +225,10 @@ export async function runSingleTest(
   let totalTokens = 0;
 
   try {
-    const stream = await client.chat.completions.create(
+    const stream = await client.completions.create(
       {
         model: modelId,
-        messages: [{ role: 'user', content: promptText }],
+        prompt: promptText,
         max_tokens: expectedMaxTokens,
         stream: true,
       },
@@ -241,10 +241,8 @@ export async function runSingleTest(
         ttftMs = performance.now() - startTime;
         firstChunk = false;
       }
-      // Count delta tokens (include reasoning_content for thinking models)
-      const delta = chunk.choices?.[0]?.delta as Record<string, unknown> | undefined;
-      if (delta?.content || delta?.reasoning_content) {
-        totalTokens += 1; // approximate; full token counting via tiktoken can happen post-hoc
+      if (chunk.choices?.[0]?.text) {
+        totalTokens += 1;
       }
     }
   } catch (err: unknown) {
@@ -347,7 +345,8 @@ export async function findMaxContext(
     }
 
     // 1. Calculate how much room is actually left for the transcript
-    const transcriptRoom = mid - PROBE_OUTPUT_TOKENS - SYSTEM_PROMPT_TOKENS - PROMPT_OVERHEAD_TOKENS;
+    // Apply a 0.8 safety factor because cl100k_base underestimates tokens for exotic models
+    const transcriptRoom = Math.floor((mid - PROBE_OUTPUT_TOKENS) * 0.8);
 
     if (transcriptRoom <= 0) {
       // If the context is so small we can't even fit the output, fail it.
@@ -401,11 +400,19 @@ export async function benchmarkSpeeds(
 ): Promise<BenchmarkEntry[]> {
   const results: BenchmarkEntry[] = [];
 
+  // Load the model ONCE for all speed tests at the maximum discovered context
+  callbacks.onLog?.(`[Speed Test] Loading model once at max context (${actualMaxContext})...`);
+  await unloadAll();
+  await new Promise(r => setTimeout(r, 1000));
+  try {
+    await loadModel(modelId, actualMaxContext);
+  } catch (err) {
+    callbacks.onLog?.(`[Speed Test] FATAL: Could not load model for speed tests: ${String(err)}`);
+    return [];
+  }
+
   for (const fraction of BENCHMARK_FRACTIONS) {
-    const contextUsed = Math.max(
-      256,
-      Math.floor(actualMaxContext * fraction),
-    );
+    const contextUsed = Math.max(256, Math.floor(actualMaxContext * fraction));
     callbacks.onLog?.(`[Speed Test] Testing at ${Math.round(fraction * 100)}% context (${contextUsed} tokens)...`);
     callbacks.onSpeedTest?.(fraction, null);
 
@@ -413,7 +420,9 @@ export async function benchmarkSpeeds(
       EXPECTED_OUTPUT_TOKENS,
       Math.max(100, Math.floor(contextUsed * 0.2)),
     );
-    const transcriptRoom = contextUsed - maxOutputTokens - SYSTEM_PROMPT_TOKENS - PROMPT_OVERHEAD_TOKENS;
+
+    // Safety factor for tokenizers
+    const transcriptRoom = Math.floor((contextUsed - maxOutputTokens) * 0.8);
 
     if (transcriptRoom <= 0) {
       callbacks.onLog?.(`[Speed Test] Skipped at ${contextUsed} tokens: Not enough room for output`);
@@ -421,29 +430,18 @@ export async function benchmarkSpeeds(
     }
 
     const prompt = generateDummyPrompt(transcriptRoom);
-    const forcedRamblePrompt = prompt + `\n\nCRITICAL INSTRUCTION: Write a highly detailed essay analyzing the text above. Do not stop until you have written at least ${Math.round(maxOutputTokens * 0.75)} words.`;
+    // Open-ended prompt ensures even pure base models will naturally generate output
+    const forcedRamblePrompt = prompt + `\n\nFurthermore, the most critical aspect of this theory is that`;
 
     const timeoutMs = INFERENCE_BASE_TIMEOUT_MS + Math.ceil(contextUsed / 1024) * INFERENCE_TIMEOUT_PER_1K_CONTEXT_MS;
 
     let success = false;
     const maxAttempts = 3;
 
-    // Retry loop to guarantee we get our data point even if VRAM is lagging
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       if (attempt > 1) {
         callbacks.onLog?.(`[Speed Test] Retrying ${contextUsed} tokens (Attempt ${attempt}/${maxAttempts})...`);
         await new Promise(r => setTimeout(r, 2000));
-      }
-
-      // Unload, then wait 1 second for OS to actually clear GPU memory
-      await unloadAll();
-      await new Promise(r => setTimeout(r, 1000));
-
-      try {
-        await loadModel(modelId, contextUsed);
-      } catch (err) {
-        callbacks.onLog?.(`[Speed Test] Load failed at ${contextUsed}: ${String(err)}`);
-        continue; // Trigger next attempt in loop
       }
 
       let testResult: TestResult | null = null;
@@ -451,7 +449,7 @@ export async function benchmarkSpeeds(
         testResult = await runSingleTest(modelId, forcedRamblePrompt, maxOutputTokens, timeoutMs);
       } catch (err) {
         callbacks.onLog?.(`[Speed Test] Run failed at ${contextUsed}: ${String(err)}`);
-        continue; // Trigger next attempt in loop
+        continue;
       }
 
       if (testResult && testResult.totalTokens > 0) {
@@ -465,12 +463,14 @@ export async function benchmarkSpeeds(
         callbacks.onLog?.(
           `[Speed Test] ${contextUsed} tokens → TTFT: ${Math.round(testResult.ttftMs)}ms, TPS: ${testResult.tps.toFixed(1)}`,
         );
-        break; // Success! Break out of the retry loop.
+        break;
+      } else {
+        callbacks.onLog?.(`[Speed Test] Run at ${contextUsed} produced 0 tokens.`);
       }
     }
 
     if (!success) {
-      callbacks.onLog?.(`[Speed Test] FATAL: Could not complete benchmark for ${contextUsed} tokens after ${maxAttempts} attempts.`);
+      callbacks.onLog?.(`[Speed Test] Could not complete benchmark for ${contextUsed} tokens after ${maxAttempts} attempts.`);
     }
   }
 
