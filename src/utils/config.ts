@@ -27,6 +27,7 @@ export const ModelSettingsSchema = z.object({
     cpu: z.string(),
     gpu: z.string(),
     ramGb: z.number(),
+    gpuVram: z.number().optional(),
   }).optional(),
   maxContext: z.number(),
   contextProbes: z.array(ContextProbeSchema).optional(),

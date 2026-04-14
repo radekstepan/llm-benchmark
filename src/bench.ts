@@ -169,6 +169,7 @@ async function main(): Promise<void> {
       cpu: hw.cpuModel,
       gpu: hw.gpuModel,
       ramGb: hw.ramGb,
+      gpuVram: hw.gpuVram,
     },
     maxContext,
     contextProbes,

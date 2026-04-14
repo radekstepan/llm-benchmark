@@ -83,7 +83,17 @@ function getDevices() {
   for (const e of DB.models) {
     if (!m.has(e.hardwareFingerprint)) {
       const info = e.hardwareInfo;
-      m.set(e.hardwareFingerprint, info ? `${info.cpu} · ${info.ramGb} GB` : e.hardwareFingerprint.slice(0,8)+'...');
+      if (info) {
+        const isDedicatedGpu = info.cpu !== info.gpu;
+        if (isDedicatedGpu && info.gpuVram) {
+          const gpuVramGb = Math.round(info.gpuVram / 1024);
+          m.set(e.hardwareFingerprint, `${info.gpu} · ${gpuVramGb} GB`);
+        } else {
+          m.set(e.hardwareFingerprint, `${info.cpu} · ${info.ramGb} GB`);
+        }
+      } else {
+        m.set(e.hardwareFingerprint, e.hardwareFingerprint.slice(0,8)+'...');
+      }
     }
   }
   return m;

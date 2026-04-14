@@ -48,7 +48,7 @@ process.on('uncaughtException', (err) => {
 
 async function processQueue(selectedIds: string[]): Promise<void> {
   const store = useAppStore.getState();
-  const { hardwareFingerprint, cpuModel, gpuModel, ramGb } = store;
+  const { hardwareFingerprint, cpuModel, gpuModel, ramGb, gpuVram } = store;
 
   for (const modelId of selectedIds) {
     if (isShuttingDown) break;
@@ -132,6 +132,7 @@ async function processQueue(selectedIds: string[]): Promise<void> {
         cpu: cpuModel,
         gpu: gpuModel,
         ramGb,
+        gpuVram,
       },
       maxContext,
       benchmarks,
