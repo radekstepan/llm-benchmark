@@ -100,28 +100,6 @@
       ]
     },
     {
-      "modelId": "qwen3.5-27b-claude-4.6-opus-reasoning-distilled",
-      "hardwareFingerprint": "03f91fe0b9916b0d",
-      "hardwareInfo": {
-        "cpu": "Apple M1 Max",
-        "gpu": "Apple M1 Max",
-        "ramGb": 64
-      },
-      "maxContext": 5887,
-      "benchmarks": [
-        {
-          "contextUsed": 4415,
-          "ttftMs": 11702,
-          "tps": 9.2
-        },
-        {
-          "contextUsed": 5887,
-          "ttftMs": 23210,
-          "tps": 6.9
-        }
-      ]
-    },
-    {
       "modelId": "qwen/qwen3.5-9b",
       "hardwareFingerprint": "c1f9f37e9dd125f4",
       "hardwareInfo": {
