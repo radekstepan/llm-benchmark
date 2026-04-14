@@ -39,29 +39,30 @@
       "hardwareInfo": {
         "cpu": "Apple M1 Max",
         "gpu": "Apple M1 Max",
-        "ramGb": 64
+        "ramGb": 64,
+        "gpuVram": 0
       },
-      "maxContext": 25088,
+      "maxContext": 32288,
       "benchmarks": [
         {
-          "contextUsed": 6272,
-          "ttftMs": 7331,
-          "tps": 30
+          "contextUsed": 8072,
+          "ttftMs": 12979,
+          "tps": 26
         },
         {
-          "contextUsed": 12544,
-          "ttftMs": 21568,
-          "tps": 20.8
+          "contextUsed": 16144,
+          "ttftMs": 29849,
+          "tps": 23.5
         },
         {
-          "contextUsed": 18816,
-          "ttftMs": 37645,
-          "tps": 12
+          "contextUsed": 24216,
+          "ttftMs": 51299,
+          "tps": 19.2
         },
         {
-          "contextUsed": 25088,
-          "ttftMs": 56785,
-          "tps": 1.5
+          "contextUsed": 32288,
+          "ttftMs": 73989,
+          "tps": 16
         }
       ]
     },
@@ -74,27 +75,27 @@
         "ramGb": 64,
         "gpuVram": 0
       },
-      "maxContext": 25088,
+      "maxContext": 28448,
       "benchmarks": [
         {
-          "contextUsed": 6272,
-          "ttftMs": 7666,
-          "tps": 39.1
+          "contextUsed": 7112,
+          "ttftMs": 8291,
+          "tps": 39.3
         },
         {
-          "contextUsed": 12544,
-          "ttftMs": 19345,
-          "tps": 35.8
+          "contextUsed": 14224,
+          "ttftMs": 22635,
+          "tps": 33.6
         },
         {
-          "contextUsed": 18816,
-          "ttftMs": 38029,
-          "tps": 25.7
+          "contextUsed": 21336,
+          "ttftMs": 45716,
+          "tps": 25
         },
         {
-          "contextUsed": 25088,
-          "ttftMs": 63100,
-          "tps": 20.4
+          "contextUsed": 28448,
+          "ttftMs": 77592,
+          "tps": 18.5
         }
       ]
     },
