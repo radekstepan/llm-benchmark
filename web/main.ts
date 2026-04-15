@@ -144,6 +144,9 @@ function buildSummaryRow(s: any) {
 
   const bestTps = sorted.reduce((best: any, sample: any) => sample.tps > best.tps ? sample : best, sorted[0]);
   const fastestTtft = sorted.reduce((best: any, sample: any) => sample.ttftMs < best.ttftMs ? sample : best, sorted[0]);
+  const tpsAtMax = sorted[sorted.length - 1].tps; // last entry = max context
+  const tpsDrop = bestTps.tps - tpsAtMax;
+  const tpsDropPct = Math.round((tpsDrop / bestTps.tps) * 100);
 
   return {
     short: shortModel(s.modelId),
@@ -154,6 +157,8 @@ function buildSummaryRow(s: any) {
     bestTtft: fTTFT(fastestTtft.ttftMs),
     bestTtftContext: fK(fastestTtft.contextUsed),
     samples: String(sorted.length),
+    tpsAtMax: fTPS(tpsAtMax),
+    tpsDropPct: tpsDropPct,
   };
 }
 
@@ -607,7 +612,7 @@ function renderStats(series: any[]) {
       + `<td><div class="metric-main">${summary.peakTps}<span class="metric-unit"> t/s</span></div><div class="metric-sub">at ${summary.peakTpsContext} tokens</div></td>`
       + `<td><div class="metric-main">${summary.bestTtft}</div><div class="metric-sub">at ${summary.bestTtftContext} tokens</div></td>`
       + `<td><div class="metric-main">${summary.samples}</div><div class="metric-sub">benchmarks captured</div></td>`
-      + `<td><div class="metric-pair"><span class="metric-pair-label">Span</span><span class="metric-pair-value">${summary.bestTtftContext} to ${summary.peakTpsContext}</span></div></td>`;
+      + `<td><div class="metric-main">${summary.peakTps} → ${summary.tpsAtMax}<span class="metric-unit"> t/s</span></div><div class="metric-sub">−${summary.tpsDropPct}% at max context</div></td>`;
     bindHoverTarget(tr, s.modelId);
     body.appendChild(tr);
   }
